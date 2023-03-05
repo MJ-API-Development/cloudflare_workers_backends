@@ -1,0 +1,14 @@
+name = "cacheget"
+main = "src/index.js"
+compatibility_date = "2023-03-04"
+usage_model = "bundled"
+
+
+[env]
+secretTokenFlare ="e6e92b5d6644cb5c2cbb576afe4e6e"
+allowedHosts ="gateway.eod-stock-api.site,stock-api6.p.rapidapi.com"
+
+[build]
+
+[triggers]
+crons = [ ]
