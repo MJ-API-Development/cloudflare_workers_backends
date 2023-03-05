@@ -72,8 +72,8 @@ async function handleBackEndTraffic(request, env){
    */
   const { host, pathname } = new URL(request.url);
   //TODO please use env variables here
-  // const gateway_hosts = ["gateway.eod-stock-api.site","www.eod-stock-api.site", "cron.eod-stock-api.site"];
-  const gateway_hosts = env.allowedHosts.split(",");
+  const gateway_hosts = ["gateway.eod-stock-api.site","www.eod-stock-api.site", "cron.eod-stock-api.site"];
+  // const gateway_hosts = env.allowedHosts.split(",");
 
     // if requests are here then it must be the gateway or rapid api making this request
   if (pathname.startsWith("/api/v1")) {
@@ -93,7 +93,7 @@ async function handleBackEndTraffic(request, env){
 
     let is_valid_signature = await is_signature_valid(signature, request, secretToken);
 
-    const gateway_host = gateway_hosts[0];
+    const gateway_host = "gateway.eod-stock-api.site";
 
     if (!is_valid_signature && (host.toLowerCase() === gateway_host)){
       // Rapid API is not yet able to create signatures
