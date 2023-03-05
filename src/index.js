@@ -80,7 +80,9 @@ async function handleGateWayTraffic(request, env){
   /**
    * Traffic going to and from the gateway will pass through this method
    * AS of Now no traffic should pass through here
+   * lets see how this works
    */
+
   return await fetch(request);
 
 }
