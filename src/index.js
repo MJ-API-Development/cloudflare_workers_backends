@@ -48,7 +48,8 @@ async function is_signature_valid(signature, request, secret) {
    * signature has to come from backend
    * @type {boolean}
    */
-  const url = new URL(request.url);
+  const {host, pathname} = new URL(request.url);
+  const url = `${host}${pathname}`;
   const method = request.method.toUpperCase();
   const headers = request.headers;
   const expectedSignature = await sha256(`${method}${url}${headers}${secret}`);
@@ -76,8 +77,7 @@ async function handleBackEndTraffic(request, env){
   // const gateway_hosts = env.allowedHosts.split(",");
 
     // if requests are here then it must be the gateway or rapid api making this request
-  if (pathname.startsWith("/api/v1")) {
-    
+
     const apiKey = request.headers.get("X-API-KEY");
     const secretToken = request.headers.get("X-SECRET-TOKEN");
     const proxySecret = request.headers.get("X-RapidAPI-Proxy-Secret");
@@ -112,7 +112,5 @@ async function handleBackEndTraffic(request, env){
         cacheKey: cacheKey,
       },
     });
-    }
 
-    return await fetch(request);
 }
