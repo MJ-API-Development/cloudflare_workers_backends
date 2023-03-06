@@ -77,6 +77,7 @@ async function handleBackEndTraffic(request, env){
   // const gateway_hosts = env.allowedHosts.split(",");
 
     // if requests are here then it must be the gateway or rapid api making this request
+  if (pathname.startsWith("/api/v1")) {
 
     const apiKey = request.headers.get("X-API-KEY");
     const secretToken = request.headers.get("X-SECRET-TOKEN");
@@ -112,5 +113,7 @@ async function handleBackEndTraffic(request, env){
         cacheKey: cacheKey,
       },
     });
+    }
 
+    return await fetch(request);
 }
