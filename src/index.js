@@ -18,7 +18,7 @@ export default {
     // The reason both backend servers are listed as hosts is because rapid api uses them, as hosts
     // const gateway_hosts = ["gateway.eod-stock-api.site","www.eod-stock-api.site", "cron.eod-stock-api.site"];
     // const backend_hosts = ["www.eod-stock-api.site", "cron.eod=stock-api.site"];
-    const gateway_hosts = env.allowedHosts.split(",");
+    const gateway_hosts = ["eod-stock-api.site", "www.eod-stock-api.site", "cron.eod-stock-api.site", "gateway.eod-stock-api.site"];
 
     if (gateway_hosts.includes(host)) {
       return await handleBackEndTraffic(request, env);
@@ -73,37 +73,30 @@ async function handleBackEndTraffic(request, env){
    */
   const { host, pathname } = new URL(request.url);
   //TODO please use env variables here
-  const gateway_hosts = ["gateway.eod-stock-api.site","www.eod-stock-api.site", "cron.eod-stock-api.site"];
+  const gateway_hosts = ["gateway.eod-stock-api.site","eod-stock-api.site", "socrates.eod-stock-api.site"];
   // const gateway_hosts = env.allowedHosts.split(",");
-
     // if requests are here then it must be the gateway or rapid api making this request
   if (pathname.startsWith("/api/v1")) {
-
     const apiKey = request.headers.get("X-API-KEY");
     const secretToken = request.headers.get("X-SECRET-TOKEN");
     const proxySecret = request.headers.get("X-RapidAPI-Proxy-Secret");
-
     // Check if headers contain valid values
     if (!apiKey || !secretToken || !proxySecret) {
       const response_message = { message: "Request not authorized" };
       return new Response(JSON.stringify(response_message), { status: 401 });
     }
-
     // Add digital signature based on the X-Secret-key header
     const signature = request.headers.get['X-Signature']
-
     let is_valid_signature = await is_signature_valid(signature, request, secretToken);
-
     const gateway_host = "gateway.eod-stock-api.site";
 
+    // Should eventually only check if signature is valid
     if (!is_valid_signature && (host.toLowerCase() === gateway_host)){
       // Rapid API is not yet able to create signatures
       const response_message = { message: "Request not authorized : Invalid Signature" };
       return new Response(JSON.stringify(response_message), { status: 401 });
-    }    
-
+    }
     const cacheKey = await createCacheKey(apiKey, secretToken, proxySecret, pathname);
-
     return await fetch(request, {
       // NOTE: This request will go to one of two BackEndServers
       // Results are cached Here for a minimum of 3 Hours
@@ -114,6 +107,5 @@ async function handleBackEndTraffic(request, env){
       },
     });
     }
-
     return await fetch(request);
 }

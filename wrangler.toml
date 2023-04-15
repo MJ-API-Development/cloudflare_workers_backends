@@ -4,10 +4,6 @@ compatibility_date = "2023-03-04"
 usage_model = "bundled"
 env = {}
 
-[vars]
-secretTokenFlare ="e6e92b5d6644cb5c2cbb576afe4e6e"
-allowedHosts ="gateway.eod-stock-api.site,www.eod-stock-api.site, cron.eod-stock-api.site"
-
 [build]
 
 [triggers]
