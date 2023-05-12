@@ -1,54 +1,43 @@
-
-// Cache the TextEncoder object
-
-const encoder = new TextEncoder();
-
-// Check if we are running in a Cloudflare Worker environment
-// noinspection JSUnresolvedVariable
-if (typeof __non_webpack_require__ !== 'undefined') {
-  // Use __non_webpack_require__ to import the crypto library
-  // noinspection JSUnresolvedVariable
-  const crypto = __non_webpack_require__('crypto');
+// src/index.js
+var encoder = new TextEncoder();
+if (typeof __non_webpack_require__ !== "undefined") {
+  const crypto2 = __non_webpack_require__("crypto");
 }
 
-export default {
+var src_default = {
   async fetch(request, env) {
-   
-    const { host, pathname } = new URL(request.url);
-    // The reason both backend servers are listed as hosts is because rapid api uses them, as hosts
-    // const gateway_hosts = ["gateway.eod-stock-api.site","www.eod-stock-api.site", "cron.eod-stock-api.site"];
-    // const backend_hosts = ["www.eod-stock-api.site", "cron.eod=stock-api.site"];
-    const gateway_hosts = ["eod-stock-api.site", "www.eod-stock-api.site", "cron.eod-stock-api.site", "gateway.eod-stock-api.site"];
-
-    if (gateway_hosts.includes(host)) {
+    let { host, pathname } = new URL(request.url);
+    const {gateway_hosts} = env;
+    const gateway_host_list = gateway_hosts.split(",");
+    
+    if (gateway_host_list.includes(host)) {     
       return await handleBackEndTraffic(request, env);
-    }     
+    }
 
-    const response_message = { message: `Request not authorized : Bad Gateway Server : ${host}${pathname}` };
+    if (host.startsWith("proxy")){
+      return await fetch(request);
+    }
+
+    const response_message = { message: `Request not authorized : Bad Gateway Server : ${host}` };
     return new Response(JSON.stringify(response_message), { status: 401 });
+
   }
 };
 
 async function sha256(message) {
   /**
-   * MY Sha 256 Algorithm
-   * @type {Uint8Array}
+   * calculates sha256
    */
   const data = encoder.encode(message);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-
-  return Array.prototype.map
-    .call(new Uint8Array(hashBuffer), (x) => ("00" + x.toString(16)).slice(-2))
-    .join("");
+  return Array.prototype.map.call(new Uint8Array(hashBuffer), (x) => ("00" + x.toString(16)).slice(-2)).join("");
 }
-
 
 async function is_signature_valid(signature, request, secret) {
   /**
-   * signature has to come from backend
-   * @type {boolean}
+   * validates request signature
    */
-  const {host, pathname} = new URL(request.url);
+  const { host, pathname } = new URL(request.url);
   const url = `${host}${pathname}`;
   const method = request.method.toUpperCase();
   const headers = request.headers;
@@ -56,56 +45,120 @@ async function is_signature_valid(signature, request, secret) {
   return signature === expectedSignature;
 }
 
-
-async function createCacheKey(apiKey, secretToken, proxySecret, pathname) {
+async function createCacheKey(apiKey, secretToken, pathname) {
   /**
-   * creating a hashed cache Signature
-   * @type {Uint8Array}
+   * create cache key for requests based on api key and pathname
    */
-  return await sha256(`${pathname}-${apiKey}-${secretToken}-${proxySecret}`);
+  return await sha256(`${pathname}-${apiKey}-${secretToken}`);
 }
 
 
-async function handleBackEndTraffic(request, env){
+async function handleBackEndTraffic(request, env) {
   /**
-   * Traffic going to and from each of the several backend servers will pass through here
-   * The only servers that can call the backend servers are the two GateWay Servers
+   * handles traffic
    */
+
   const { host, pathname } = new URL(request.url);
-  //TODO please use env variables here
-  const gateway_hosts = ["gateway.eod-stock-api.site","eod-stock-api.site", "socrates.eod-stock-api.site"];
-  // const gateway_hosts = env.allowedHosts.split(",");
-    // if requests are here then it must be the gateway or rapid api making this request
+  const {gateway_hosts} = env;
+  const gateway_host_list = gateway_hosts.split(",");
+
   if (pathname.startsWith("/api/v1")) {
+    
     const apiKey = request.headers.get("X-API-KEY");
+
     const secretToken = request.headers.get("X-SECRET-TOKEN");
-    const proxySecret = request.headers.get("X-RapidAPI-Proxy-Secret");
-    // Check if headers contain valid values
-    if (!apiKey || !secretToken || !proxySecret) {
+    
+
+    if (!apiKey || !secretToken) {
       const response_message = { message: "Request not authorized" };
       return new Response(JSON.stringify(response_message), { status: 401 });
     }
-    // Add digital signature based on the X-Secret-key header
-    const signature = request.headers.get['X-Signature']
-    let is_valid_signature = await is_signature_valid(signature, request, secretToken);
-    const gateway_host = "gateway.eod-stock-api.site";
 
-    // Should eventually only check if signature is valid
-    if (!is_valid_signature && (host.toLowerCase() === gateway_host)){
-      // Rapid API is not yet able to create signatures
+    const is_api_valid = await compareApiKeys(apiKey, env);
+
+    if (!is_api_valid){
+      const response_message = { message: "Request not authorized : Invalid API Key" };
+      return new Response(JSON.stringify(response_message), { status: 401 });
+    }
+
+    const is_secret_token_valid = await compareSecretToken(secretToken, env);
+
+    if (!is_secret_token_valid){
+      const response_message = { message: "Request not authorized : Invalid Secret Token" };
+      return new Response(JSON.stringify(response_message), { status: 401 });
+    }
+
+    const signature = request.headers.get("X-Signature");
+
+    let is_valid_signature = await is_signature_valid(signature, request, secretToken);
+    
+    const {gateway_host} = env;
+
+    if (!is_valid_signature && host.toLowerCase() === gateway_host) {
       const response_message = { message: "Request not authorized : Invalid Signature" };
       return new Response(JSON.stringify(response_message), { status: 401 });
     }
-    const cacheKey = await createCacheKey(apiKey, secretToken, proxySecret, pathname);
-    return await fetch(request, {
-      // NOTE: This request will go to one of two BackEndServers
-      // Results are cached Here for a minimum of 3 Hours
-      cf: {
-        cacheTtl: 10800, // 3 hours
-        cacheEverything: true,
-        cacheKey: cacheKey,
-      },
-    });
+
+    // Caching get requests only
+    const cacheKey = await createCacheKey(apiKey, secretToken, pathname);
+
+    if (request.method.toUpperCase() == "GET"){
+        return await fetch(request, {
+          cf: {
+            cacheTtl: 10800,
+            cacheEverything: true,
+            cacheKey
+          }
+        });
     }
+
+    // only cache get requests 
     return await fetch(request);
+
+  }
+  // This means all other paths are returned
+  // Redirects all www and client requests to root
+
+  let new_host
+  if (host.startsWith("www")){
+    new_host == "eod-stock-api.site";
+  }
+  if (host.startsWith("client")){
+    new_host == "eod-stock-api.site";
+  }    
+  let _url = `${new_host}${path}`; 
+  
+  const new_request = new Request(_url, {
+    method: request.method,
+    headers: new Headers(request.headers),
+    body: request.body,
+    cors: request.cors,
+    credentials: request.credentials
+  });
+
+  return await fetch(new_request);
 }
+
+
+async function compareApiKeys(apiKey, env) {
+  /**
+   * compares two api keys to check if they are equal
+   */
+  const {api_key} = env;
+  return apiKey === api_key
+}
+
+async function compareSecretToken(token, env){
+  /**
+   * compares secret token with the one in enviroment to see if equal
+   */
+  const {secretTokenFlare} = env;
+  return token === secretTokenFlare;
+}
+
+
+
+export {
+  src_default as default
+};
+
